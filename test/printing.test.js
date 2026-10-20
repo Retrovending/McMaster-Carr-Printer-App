@@ -53,3 +53,13 @@ test('DYMO submission errors propagate without a browser retry', async () => {
   await assert.rejects(service.print('DYMO', { ...job, size: { ...job.size, dymo: {} } }), /Service timeout/);
   assert.equal(opened, false);
 });
+
+test('both print backends pass editable element geometry to the renderer',async()=>{
+ for(const printer of [Printing.BROWSER,'DYMO']) {
+  const {service,calls}=fixture();
+  const elements={company:{x:.1,y:.1,w:.8,h:.2}};
+  await service.print(printer,{...job,layout:'editable',elements,size:{...job.size,dymo:{}}});
+  assert.deepEqual(calls[0][1].elements,elements);
+  assert.equal(calls[0][1].layout,'editable');
+ }
+});

@@ -12,7 +12,7 @@
         const { size } = job;
         const canvas = label.renderLabel(job.part, {
           widthIn: size.width, heightIn: size.height, padIn: 0.06, leftPadIn: 0.1,
-          image: job.image, layout: job.layout
+          image: job.image, layout: job.layout, elements: job.elements
         });
         // Each tab owns its job, so concurrent print tabs cannot overwrite it.
         const id = root.crypto.randomUUID();
@@ -29,7 +29,7 @@
         const bounds = label.dymoBounds(job.size);
         const canvas = label.renderLabel(job.part, {
           widthIn: bounds.w / 1440, heightIn: bounds.h / 1440,
-          padIn: 0.02, image: job.image, layout: job.layout
+          padIn: 0.02, image: job.image, layout: job.layout, elements: job.elements
         });
         const xml = label.dymoLabelXml(job.size, canvas.toDataURL("image/png").split(",")[1]);
         await dymo.printLabel(printer, xml, job.copies);

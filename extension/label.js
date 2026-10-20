@@ -184,7 +184,76 @@
     return s;
   }
 
+
+  // Editable element boxes use fractions of the label so preview and print agree.
+  const ELEMENT_DEFAULTS = {
+    company: { x: .04, y: .04, w: .92, h: .20 },
+    partNumber: { x: .30, y: .28, w: .43, h: .18 },
+    description: { x: .30, y: .48, w: .43, h: .46 },
+    image: { x: .04, y: .30, w: .23, h: .60 },
+    qr: { x: .77, y: .30, w: .19, h: .60 }
+  };
+  function editorElements(value = {}) {
+    const out = {};
+    for (const [key, defaults] of Object.entries(ELEMENT_DEFAULTS)) {
+      const e = { ...defaults, ...value[key] };
+      const number = (n, fallback) => Number.isFinite(Number(n)) ? Number(n) : fallback;
+      e.scale = Math.max(.4, Math.min(2.5, number(e.scale, 1)));
+      e.w = Math.max(.04, Math.min(.96, number(e.w, defaults.w)));
+      e.h = Math.max(.04, Math.min(.96, number(e.h, defaults.h)));
+      e.x = Math.max(.02, Math.min(.98 - e.w, number(e.x, defaults.x)));
+      e.y = Math.max(.02, Math.min(.98 - e.h, number(e.y, defaults.y)));
+      out[key] = e;
+    }
+    return out;
+  }
+  function companyName(part) {
+    let host = '';
+    try { host = new URL(part.url).hostname; } catch (_) {}
+    if (/^(www\.)?automationdirect\.com$/i.test(host)) return 'Automation Direct';
+    if (/^([a-z0-9-]+\.)*mcmaster\.com$/i.test(host)) return 'McMaster';
+    return '';
+  }
+  function drawEditable(ctx, part, opts, W, H, makeCanvas, qrLib) {
+    const elements = editorElements(opts.elements);
+    for (const [key, e] of Object.entries(elements)) {
+      const x = Math.round(e.x * W), y = Math.round(e.y * H);
+      const w = Math.round(e.w * W), h = Math.round(e.h * H);
+      ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+      if (key === 'company') {
+        const name = companyName(part);
+        if (name) {
+          ctx.fillStyle = '#000'; ctx.fillRect(x, y, w, h);
+          let size = Math.max(8, Math.round(h * .78));
+          ctx.font = 'bold ' + size + 'px ' + FONT;
+          while (size > 8 && ctx.measureText(name).width > w * .94) ctx.font = 'bold ' + (--size) + 'px ' + FONT;
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(name, x + w / 2, y + h / 2);
+        }
+      } else if (key === 'image') {
+        if (opts.image) drawPartImage(ctx, opts.image, x, y, w, h, makeCanvas);
+      } else if (key === 'qr') {
+        if (part.url) { const side = Math.min(w, h); drawQR(ctx, qrLib, part.url, x + (w - side) / 2, y + (h - side) / 2, side); }
+      } else if (key === 'partNumber') {
+        ctx.fillStyle = '#000'; ctx.textBaseline = 'top';
+        const size = fitBold(ctx, part.partNumber || '', w, h * .85);
+        ctx.fillText(part.partNumber || '', x, y);
+      } else {
+        // Fixed readable type: larger boxes enlarge text; overflow ends with ….
+        const size = Math.max(10, Math.min(h * .22, w * .085));
+        ctx.font = size + 'px ' + FONT; ctx.fillStyle = '#000'; ctx.textBaseline = 'top';
+        const lines = wrapText(ctx, part.description || '', w);
+        const count = Math.max(1, Math.floor(h / (size * 1.15)));
+        const visible = lines.slice(0, count);
+        if (lines.length > count) visible[count - 1] = ellipsize(ctx, visible[count - 1] + '…', w);
+        visible.forEach((line, i) => ctx.fillText(line, x, y + i * size * 1.15));
+      }
+      ctx.restore();
+    }
+  }
+
   const LAYOUTS = {
+    editable: { name: "Editable — drag and resize elements", draw() {} },
     // Picture | part number + description | QR
     classic: {
       name: "Classic — picture · text · QR",
@@ -322,6 +391,10 @@
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, W, H);
+    if (opts.layout === 'editable') {
+      drawEditable(ctx, part, opts, W, H, makeCanvas, qrLib);
+      return canvas;
+    }
     // Reserve physical space for the seller banner before drawing any layout.
     let company = '';
     let host = '';
@@ -406,7 +479,7 @@
 </DieCutLabel>`;
   }
 
-  const api = { DPI, LABEL_SIZES, LAYOUTS, renderLabel, dymoLabelXml, dymoBounds };
+  const api = { ELEMENT_DEFAULTS, editorElements, DPI, LABEL_SIZES, LAYOUTS, renderLabel, dymoLabelXml, dymoBounds };
   root.McmLabel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

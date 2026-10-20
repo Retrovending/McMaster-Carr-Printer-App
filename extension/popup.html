@@ -31,6 +31,15 @@
     </fieldset>
     <div class="preview-wrap"><canvas id="preview"></canvas></div>
     <div id="previewSize" class="preview-size"></div>
+    <button id="customize" type="button">Customize — drag and resize</button>
+    <fieldset id="elementControls" hidden>
+      <legend>Element size and position</legend>
+      <label class="field">Element<select id="elementSelect"></select></label>
+      <label class="field" for="elementScale">Size <output id="elementPercent">100%</output></label>
+      <input id="elementScale" type="range" min="40" max="250" step="5" value="100">
+      <button id="resetDesign" type="button">Reset arrangement</button>
+      <p id="editorHint"></p>
+    </fieldset>
 
     <label class="field">
       <span id="descLabel">Description</span>

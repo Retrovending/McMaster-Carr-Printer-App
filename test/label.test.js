@@ -53,11 +53,20 @@ test('seller banner leaves QR readable for both companies in every layout and si
    const canvas=render({partNumber:'C0-00DD1-D',description:'24 VDC power supply',url},{size,layout});
    assert.equal(decodeQR(canvas),url,size+'/'+layout);
    const ctx=canvas.getContext('2d'),h=Math.round(Math.min(66,canvas.height*0.16));
-   const pixels=ctx.getImageData(25,20,canvas.width-50,h-21).data;
+   const box = layout === 'editable' ? {x:Math.round(canvas.width*.05),y:Math.round(canvas.height*.05),w:Math.round(canvas.width*.90),h:Math.round(canvas.height*.18)} : {x:25,y:20,w:canvas.width-50,h:h-21};
+   const pixels=ctx.getImageData(box.x,box.y,box.w,box.h).data;
    let black=0,white=0;
    for(let i=0;i<pixels.length;i+=4){if(pixels[i]<30)black++;if(pixels[i]>225)white++;}
    assert.ok(black>white,'banner has black background');
    assert.ok(white>0,'banner has white lettering');
   }
+ }
+});
+
+test('editable elements clamp invalid and off-label positions',()=>{
+ const elements=Label.editorElements({company:{x:NaN,y:-10,w:20,h:Infinity},qr:{x:2,y:2,w:.2,h:.2}});
+ for(const e of Object.values(elements)) {
+  assert.ok(e.x>=.02 && e.y>=.02);
+  assert.ok(e.x+e.w<=.981 && e.y+e.h<=.981);
  }
 });

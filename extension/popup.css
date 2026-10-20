@@ -45,3 +45,7 @@ code { font-size: 12px; }
 #attributes { max-height: 190px; overflow-y: auto; }
 #attributes label { display: block; margin: 6px 0; }
 #lookupStatus { overflow-wrap: anywhere; }
+
+#preview { touch-action: none; cursor: move; }
+#elementScale { width: 100%; }
+#editorHint { font-size: 11px; color: var(--muted); }
