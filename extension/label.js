@@ -322,8 +322,31 @@
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, W, H);
+    // Reserve physical space for the seller banner before drawing any layout.
+    let company = '';
+    let host = '';
+    try { host = new URL(part.url).hostname; } catch (_) {}
+    if (/^(www\.)?automationdirect\.com$/i.test(host)) company = 'Automation Direct';
+    else if (/^([a-z0-9-]+\.)*mcmaster\.com$/i.test(host)) company = 'McMaster';
+    const bannerH = company ? Math.round(Math.min(66, H * 0.16)) : 0;
+    if (company) {
+      const inset = Math.round((opts.padIn ?? 0.06) * DPI);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(inset, inset, W - inset * 2, bannerH - inset);
+      let fontSize = Math.round((bannerH - inset) * 0.65);
+      ctx.font = 'bold ' + fontSize + 'px ' + FONT;
+      while (fontSize > 8 && ctx.measureText(company).width > W - inset * 4) {
+        ctx.font = 'bold ' + (--fontSize) + 'px ' + FONT;
+      }
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(company, W / 2, inset + (bannerH - inset) / 2);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    }
+    ctx.save();
+    ctx.translate(0, bannerH);
     const c = {
-      ctx, W, H, part,
+      ctx, W, H: H - bannerH, part,
       pad: Math.round((opts.padIn ?? 0.06) * DPI),
       padL: Math.round((opts.leftPadIn ?? opts.padIn ?? 0.06) * DPI),
       gap: Math.round(0.05 * DPI),
@@ -333,6 +356,7 @@
       qr: (x, y, s) => drawQR(ctx, qrLib, part.url, x, y, s)
     };
     (LAYOUTS[opts.layout] || LAYOUTS.classic).draw(c);
+    ctx.restore();
     return canvas;
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "mcmaster2dymo",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "description": "Chrome extension that prints a label for the McMaster-Carr part you're viewing.",
   "license": "MIT",
