@@ -25,7 +25,8 @@
   </details>
   <main id="main" hidden>
     <fieldset id="attributePanel" hidden>
-      <legend>Attributes to print</legend>
+      <legend>Detected product fields</legend>
+      <label class="check"><input id="useAttributeText" type="checkbox" checked> Use selected fields as label text</label>
       <div id="attributes"></div>
       <p>Selections are remembered per product on this computer. Long text is shortened with … on the label; check the preview.</p>
     </fieldset>
@@ -47,10 +48,11 @@
         <label class="field">Width %<input id="box-w" type="number" min="4" max="96" step="0.1"></label>
         <label class="field">Height %<input id="box-h" type="number" min="4" max="96" step="0.1"></label>
       </div>
+      <label class="field">Detected website field<select id="detectedField"></select></label>
       <label class="field">Field name<input id="fieldName" maxlength="100"></label>
       <label class="field">Type<select id="fieldType"><option value="text">Text</option><option value="code">Barcode / QR</option><option value="image">Product picture</option></select></label>
       <label class="field">Text / encoded content<textarea id="fieldText" rows="3"></textarea></label>
-      <p class="help">Templates: {company}, {partNumber}, {description}, {selectedAttributes}, {url}. A site binding below overrides this text unless set to Fixed text/template.</p>
+      <p class="help">Templates: {company}, {partNumber}, {description}, {selectedAttributes}, {labelText}, {url}. A site binding below overrides this text unless set to Fixed text/template.</p>
       <div id="textSettings">
         <label class="field">Font family<input id="fieldFont" list="fontFamilies"><datalist id="fontFamilies"><option value="Arial"><option value="Verdana"><option value="Georgia"><option value="Times New Roman"><option value="Courier New"><option value="Consolas"><option value="Impact"></datalist></label>
         <label class="field">Font size (points; 0 = automatic)<input id="fieldFontSize" type="number" min="0" max="200" step="0.5"></label>

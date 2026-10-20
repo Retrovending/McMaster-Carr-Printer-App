@@ -1,6 +1,6 @@
 {
   "name": "mcmaster2dymo",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "Modular product-label designer with site bindings and Chrome printing.",
   "license": "MIT",

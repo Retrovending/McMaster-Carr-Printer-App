@@ -7,6 +7,8 @@ let partImages = [];   // ImageBitmap[] (best guess first)
 let imgIndex = 0;
 let attributeSelections = [];
 let adPreferences = {};
+let fieldPreferences = {};
+let detectedFields = {};
 let imagePreference = true;
 let savedDesigns = {};
 let selectedElement = 'company';
@@ -152,7 +154,9 @@ function rebuildElements() {
 }
 function bindingOptions(site,stored) {
   const values=[['default','Default/template'],['literal','Fixed text/template'],['company','Company'],['partNumber','Part number'],['description','Product description'],['selectedAttributes','Selected attribute text'],['url','Product URL']];
-  for(const a of part?.attributes || []) if(site==='automationdirect') values.push(['attribute:'+a.name,a.name]);
+  const names=new Set(detectedFields[site] || []);
+  if(part && McmLabel.supplier(part)===site)for(const a of part.attributes || [])names.add(a.name);
+  for(const name of names)values.push(['attribute:'+name,name]);
   if(stored?.startsWith('attribute:')&&!values.some(e=>e[0]===stored))values.push([stored,stored.slice(10)]);
   values.push(['attribute:','Other attribute (enter name below)']);
   return values;
@@ -163,8 +167,16 @@ function updateEditorControls() {
   $('rotation').value=String(currentRotation());$('invertLabel').checked=currentInvert();
   $('elementSelect').value=selectedElement;
   $('elementScale').value=Math.round((e.scale||1)*100);$('elementPercent').textContent=$('elementScale').value+'%';
+  const site=part?McmLabel.supplier(part):'';
+  $('detectedField').replaceChildren();
+  $('detectedField').add(new Option('Choose detected content…',''));
+  if(part) {
+    for(const [value,name] of [['partNumber','Part number'],['description','Product description'],['url','Product URL'],['company','Company'],['selectedAttributes','Selected fields combined']])$('detectedField').add(new Option(name,value));
+    for(const a of part.attributes || [])$('detectedField').add(new Option(a.name+' — '+a.value,'attribute:'+a.name));
+    $('detectedField').value=e.bindings[site] || '';
+  }
   $('fieldName').value=elementTitle(selectedElement,e);$('fieldType').value=e.type;
-  const defaults={company:'{company}',partNumber:'{partNumber}',description:'{selectedAttributes}',qr:'{url}'};
+  const defaults={company:'{company}',partNumber:'{partNumber}',description:'{labelText}',qr:'{url}'};
   $('fieldText').value=e.text ?? defaults[selectedElement] ?? 'Custom text';
   $('fieldFont').value=e.fontFamily;$('fieldFontSize').value=e.fontSize;
   $('fieldBold').checked=e.bold ?? (selectedElement==='company'||selectedElement==='partNumber');
@@ -186,6 +198,11 @@ function editField(patch,update=false) {
   enableEditor();const elements=currentElements();Object.assign(elements[selectedElement],patch);saveDesign(elements);refreshPreview();saveSettings();if(update)updateEditorControls();
 }
 function initModularFields() {
+  $('detectedField').addEventListener('change',()=>{
+    if(!part || !$('detectedField').value)return;
+    const e=currentElements()[selectedElement],site=McmLabel.supplier(part),binding=$('detectedField').value;
+    editField({bindings:{...e.bindings,[site]:binding}},true);
+  });
   const formats=rootBarcodeFormats();
   for(const f of formats)$('codeType').add(new Option(f.desc,f.bcid));
   $('addText').addEventListener('click',()=>addField('text'));
@@ -294,8 +311,10 @@ function currentSize() {
 }
 
 function currentPart() {
-  return { ...part, productDescription: part?.description || '', selectedAttributes: part?.source === 'automationdirect' ? AdProduct.description(part.attributes,attributeSelections) : $('desc').value, description: part?.source === 'automationdirect'
-    ? AdProduct.description(part.attributes, attributeSelections) : $("desc").value };
+  const hasAttributes=!!part?.attributes?.length;
+  const selected=hasAttributes ? AdProduct.description(part.attributes,attributeSelections) : $('desc').value;
+  return {...part, productDescription:part?.description || '', selectedAttributes:selected,
+    description:hasAttributes && $('useAttributeText').checked ? selected : $('desc').value};
 }
 
 function imageIfOn() {
@@ -394,7 +413,14 @@ async function init() {
   populateNamedLayouts(activeLayouts[$('size').value] || (McmLabel.LAYOUTS[settings.layout] && settings.layout!=='editable' ? 'saved:builtin-'+settings.layout : settings.layout));
   initEditor();
   useNamedLayout();
-  adPreferences = (await chrome.storage.local.get({ adSelections: {} })).adSelections;
+  const fieldState=await chrome.storage.local.get({adSelections:{},productFieldSelections:{},detectedFieldNames:{}});
+  adPreferences=fieldState.adSelections;fieldPreferences=fieldState.productFieldSelections;detectedFields=fieldState.detectedFieldNames;
+  $('useAttributeText').addEventListener('change',()=>{
+    $('desc').readOnly=$('useAttributeText').checked;
+    $('desc').value=$('useAttributeText').checked?currentPart().selectedAttributes:part?.description || '';
+    $('descLabel').textContent=$('useAttributeText').checked?'Selected field text':'Description';
+    rememberFields();refreshPreview();
+  });
   $("adLookup").addEventListener("submit", lookupProduct);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   try {
@@ -445,38 +471,48 @@ async function init() {
   document.body.dataset.ready="true";
 }
 
+function rememberFields() {
+  if(!part)return;
+  const site=McmLabel.supplier(part),key=site+':'+part.partNumber;
+  delete fieldPreferences[key];fieldPreferences[key]={names:[...attributeSelections],useSelected:$('useAttributeText').checked};
+  fieldPreferences=Object.fromEntries(Object.entries(fieldPreferences).slice(-100));
+  const values={productFieldSelections:fieldPreferences};
+  // Preserve the old AutomationDirect selection key for users upgrading this extension.
+  if(site==='automationdirect'){adPreferences[part.partNumber]=[...attributeSelections];values.adSelections=adPreferences;}
+  chrome.storage.local.set(values);
+}
+
 async function showPart(result) {
   part = result; partImages = []; imgIndex = 0;
   $("main").hidden = false; $("notPart").hidden = true;
   $("partNo").textContent = part.partNumber || '';
-  const ad = part.source === 'automationdirect';
-  $("attributePanel").hidden = !ad;
-  $("desc").readOnly = ad;
-  $("descLabel").textContent = ad ? 'Selected attribute text' : 'Description';
-  $("attributes").replaceChildren();
-  if (ad) {
-    const saved = adPreferences[part.partNumber];
-    attributeSelections = Array.isArray(saved) ? saved.filter(n => part.attributes.some(a => a.name === n)) : AdProduct.defaults(part.attributes);
-    for (const a of part.attributes) {
-      const label = document.createElement('label');
-      const box = document.createElement('input'); box.type = 'checkbox';
-      box.checked = attributeSelections.includes(a.name);
-      label.append(box, document.createTextNode(' ' + a.name + ': ' + a.value));
-      box.addEventListener('change', () => {
-        attributeSelections = [...$("attributes").querySelectorAll('input')].flatMap((b,i) => b.checked ? [part.attributes[i].name] : []);
-        // Bound storage growth; preserve an intentionally empty selection.
-        delete adPreferences[part.partNumber];
-        adPreferences[part.partNumber] = attributeSelections;
-        const entries = Object.entries(adPreferences).slice(-50);
-        adPreferences = Object.fromEntries(entries);
-        chrome.storage.local.set({ adSelections: adPreferences });
-        $("desc").value = currentPart().description;
-        refreshPreview();
-      });
-      $("attributes").append(label);
-    }
+  part.attributes=Array.isArray(part.attributes)?part.attributes:[];
+  const site=McmLabel.supplier(part), key=site+':'+part.partNumber,hasAttributes=part.attributes.length>0;
+  detectedFields[site]=[...new Set([...(detectedFields[site]||[]),...part.attributes.map(a=>a.name)])];
+  chrome.storage.local.set({detectedFieldNames:detectedFields});
+  const saved=fieldPreferences[key];
+  const old=site==='automationdirect'?adPreferences[part.partNumber]:null;
+  const defaults=site==='mcmaster'
+    ? part.attributes.filter(a=>/^(Thread Size|Length|Material|Diameter|Width|Height|Drive Size)$/i.test(a.name)).slice(0,3).map(a=>a.name)
+    : AdProduct.defaults(part.attributes);
+  attributeSelections=(saved?.names || old || defaults).filter(n=>part.attributes.some(a=>a.name===n));
+  $('attributePanel').hidden=!hasAttributes;
+  $('useAttributeText').checked=hasAttributes && (saved?.useSelected ?? true);
+  $('desc').readOnly=$('useAttributeText').checked;
+  $('descLabel').textContent=$('useAttributeText').checked?'Selected field text':'Description';
+  $('attributes').replaceChildren();
+  for(const a of part.attributes) {
+    const label=document.createElement('label'),box=document.createElement('input');box.type='checkbox';
+    box.checked=attributeSelections.includes(a.name);
+    label.append(box,document.createTextNode(' '+a.name+': '+a.value));
+    box.addEventListener('change',()=>{
+      attributeSelections=[...$('attributes').querySelectorAll('input')].flatMap((b,i)=>b.checked?[part.attributes[i].name]:[]);
+      if($('useAttributeText').checked)$('desc').value=currentPart().selectedAttributes;
+      rememberFields();refreshPreview();
+    });
+    $('attributes').append(label);
   }
-  $("desc").value = ad ? currentPart().description : part.description;
+  $('desc').value=$('useAttributeText').checked?currentPart().selectedAttributes:part.description;
   updateEditorControls();
   refreshPreview();
   partImages = await loadImages(part);

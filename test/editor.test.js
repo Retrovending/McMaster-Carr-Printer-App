@@ -7,7 +7,7 @@ async function popup(browser,state={}){
   window.localState=state.local||{};window.syncState=state.sync||{};let id=0;
   if(!crypto.randomUUID)crypto.randomUUID=()=> 'test-id-'+(++id);
   window.chrome={storage:{local:{get:async d=>structuredClone({...d,...localState}),set:async v=>Object.assign(localState,structuredClone(v))},sync:{get:async d=>({...d,...syncState}),set:async v=>Object.assign(syncState,structuredClone(v))}},
-   tabs:{query:async()=>[{id:1,url:'https://www.mcmaster.com/91290A115/'}]},scripting:{executeScript:async()=>[{result:{partNumber:'91290A115',description:'Socket Head Screw',url:'https://www.mcmaster.com/91290A115/',images:[],imageDataUrls:[]}}]}};
+   tabs:{query:async()=>[{id:1,url:'https://www.mcmaster.com/91290A115/'}]},scripting:{executeScript:async()=>[{result:{partNumber:'91290A115',description:'Socket Head Screw',attributes:state.attributes || [],url:'https://www.mcmaster.com/91290A115/',images:[],imageDataUrls:[]}}]}};
   window.McmPrinting={create:()=>({print:async(printer,job)=>{window.printed=job;return {backend:'browser'}}})};
  },state);
  for(const name of ['lib/qrcode.js','lib/bwip-js-min.js','label.js','extract.js','automationdirect.js','popup.js'])await p.addScriptTag({path:path.join(extension,name)});
@@ -130,4 +130,27 @@ test('individual color inversion changes only that element box',()=>{
   const i=(y*a.width+x)*4,inside=x>=left&&x<right&&y>=top&&y<bottom;
   assert.equal(db[i],inside?255-da[i]:da[i]);
  }
+});
+
+test('McMaster detected specs use the shared selector, persist checks and bind directly to fields',async()=>{
+ const b=await chromium.launch(chromeLaunchOptions());try{
+  const attributes=[{name:'Thread Size',value:'M3 × 0.5 mm'},{name:'Length',value:'10 mm'},{name:'Material',value:'Black-Oxide Alloy Steel'}];
+  const p=await popup(b,{attributes});
+  assert.equal(await p.isVisible('#attributePanel'),true);assert.equal(await p.locator('#attributes input').count(),3);
+  assert.ok((await p.inputValue('#desc')).includes('Thread Size: M3 × 0.5 mm'));
+  await p.locator('#attributes input').nth(2).uncheck();await p.click('#print');
+  assert.equal(await p.evaluate(()=>printed.part.description),'Thread Size: M3 × 0.5 mm; Length: 10 mm');
+  await p.click('#addText');const field=await p.inputValue('#elementSelect');
+  await p.selectOption('#detectedField','attribute:Thread Size');
+  assert.equal(await p.evaluate(id=>McmLabel.elementText(currentPart(),id,currentElements()[id]),field),'M3 × 0.5 mm');
+  assert.equal(await p.locator('#bindingMc option[value="attribute:Thread Size"]').count(),1);
+  await p.uncheck('#useAttributeText');await p.click('#print');
+  assert.equal(await p.evaluate(()=>printed.part.description),'Socket Head Screw');
+  assert.equal(await p.evaluate(()=>McmLabel.elementText(currentPart(),'description',currentElements().description)),'Socket Head Screw');
+  const state=await p.evaluate(()=>({local:localState,sync:syncState}));state.attributes=attributes;
+  const r=await popup(b,state);assert.equal(await r.isChecked('#useAttributeText'),false);
+  assert.equal(await r.locator('#attributes input').nth(2).isChecked(),false);
+  await r.check('#useAttributeText');await r.click('#print');
+  assert.equal(await r.evaluate(()=>printed.part.description),'Thread Size: M3 × 0.5 mm; Length: 10 mm');
+ }finally{await b.close()}
 });

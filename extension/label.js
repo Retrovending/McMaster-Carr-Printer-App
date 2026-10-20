@@ -230,15 +230,15 @@
     return '';
   }
   function elementText(part,key,e) {
-    const defaultText={company:'{company}',partNumber:'{partNumber}',description:'{selectedAttributes}',qr:'{url}'};
-    const values={company:companyName(part),partNumber:part.partNumber||'',url:part.url||'',description:part.productDescription??part.description??'',selectedAttributes:part.selectedAttributes??part.description??''};
+    const defaultText={company:'{company}',partNumber:'{partNumber}',description:'{labelText}',qr:'{url}'};
+    const values={labelText:part.description || '',company:companyName(part),partNumber:part.partNumber||'',url:part.url||'',description:part.productDescription??part.description??'',selectedAttributes:part.selectedAttributes??part.description??''};
     const binding=e.bindings?.[supplier(part)];
     if(binding && binding!=='default' && binding!=='literal') {
       if(binding.startsWith('attribute:'))return (part.attributes||[]).find(a=>a.name.toLowerCase()===binding.slice(10).toLowerCase())?.value || '';
       return values[binding] || '';
     }
     const template=typeof e.text==='string'?e.text:(defaultText[key] || 'Custom text');
-    return template.replace(/\{(company|partNumber|description|selectedAttributes|url)\}/g,(_,name)=>values[name]);
+    return template.replace(/\{(company|partNumber|description|selectedAttributes|url|labelText)\}/g,(_,name)=>values[name]);
   }
   function invertCanvas(canvas) {
     const g=canvas.getContext('2d'),image=g.getImageData(0,0,canvas.width,canvas.height);

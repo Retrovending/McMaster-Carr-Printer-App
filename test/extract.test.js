@@ -34,3 +34,21 @@ test("extractor picks the product render, not the dimension drawing", { skip: !l
     srv.close();
   }
 });
+
+test('actual McMaster spec tables expose grouped thread size and other facts',async()=>{
+ const {chromium}=require('playwright-core'),browser=await chromium.launch(launch);
+ try {
+  for(const [pn,count,thread] of [['91290A115',28,'M3 × 0.5 mm'],['9541K43',25,'1/2"-13']]) {
+   const page=await browser.newPage();
+   await page.setContent(fs.readFileSync(path.join(__dirname,'fixtures/mcmaster-'+pn+'-specs.html'),'utf8')+'<table><tr><td>Cart Price</td><td>$100</td></tr></table>');
+   await page.addScriptTag({path:path.join(ROOT,'extension/extract.js')});
+   const part=await page.evaluate(()=>extractMcMaster());
+   assert.equal(part.source,'mcmaster');assert.equal(part.partNumber,pn);assert.equal(part.attributes.length,count);
+   assert.equal(part.attributes.find(a=>a.name==='Thread Size').value,thread);
+   assert.ok(part.attributes.some(a=>a.name==='Material'));
+   assert.ok(!part.attributes.some(a=>a.name==='Cart Price'||a.name==='Size'));
+   if(pn==='91290A115')assert.equal(part.attributes.find(a=>a.name==='Head Diameter').value,'5.5 mm');
+   await page.close();
+  }
+ }finally{await browser.close()}
+});

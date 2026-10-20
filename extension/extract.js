@@ -44,6 +44,50 @@ async function extractMcMaster() {
     if (/^McMaster-Carr$/i.test(description)) description = "";
   }
 
+  // Read displayed specification rows, including McMaster's grouped/indented labels.
+  // Do not interpret arbitrary cart/pricing tables or infer specs from prose.
+  const attributes = [], attributeNames = new Set();
+  const addAttribute = (name, value) => {
+    name=clean(name); value=clean(value);
+    if (!name || !value || attributeNames.has(name.toLowerCase())) return;
+    attributeNames.add(name.toLowerCase());attributes.push({name,value});
+  };
+  // McMaster can insert specs shortly after the heading during navigation.
+  if(partNumber && /(^|\.)mcmaster\.com$/i.test(location.hostname) && !document.querySelector('table[class*="product-detail-spec-table"],table[class*="SpecTbl"],table[id*="spec" i]')) {
+    await new Promise(resolve=>{
+      const done=()=>{observer.disconnect();clearTimeout(timer);resolve();};
+      const observer=new MutationObserver(()=>{
+        if(document.querySelector('table[class*="product-detail-spec-table"],table[class*="SpecTbl"],table[id*="spec" i]'))done();
+      });
+      const timer=setTimeout(done,3500);observer.observe(document.body,{childList:true,subtree:true});
+    });
+  }
+  const tables=[...document.querySelectorAll('table[class*="product-detail-spec-table"], table[class*="SpecTbl"], table[id*="Spec"], table[id*="spec"]')].filter(visible);
+  for(const table of tables) {
+    let group='';
+    for(const row of table.querySelectorAll('tr')) {
+      if(!visible(row))continue;
+      const cells=[...row.children].filter(e=>/^(TD|TH)$/.test(e.tagName));
+      if(cells.length!==2)continue;
+      const label=cells[0].querySelector('[class*="spec-row-label"]') || cells[0];
+      const valueCell=cells[1].querySelector('[class*="spec-row-value"]') || cells[1];
+      const name=clean((label.querySelector('span') || label).innerText);
+      const values=[...valueCell.querySelectorAll('li')];
+      const value=values.length?values.map(e=>clean(e.innerText)).join('; '):clean(valueCell.innerText);
+      const indented=/row-indented|label-indented/i.test(row.className+' '+label.className);
+      if(!value) {if(name)group=name;continue;}
+      addAttribute(indented&&group&&!name.toLowerCase().startsWith(group.toLowerCase())?group+' '+name:name,value);
+      if(!indented)group='';
+    }
+  }
+  for(const dl of document.querySelectorAll('[class*="spec" i] dl, dl[class*="spec" i]')) {
+    if(!visible(dl))continue;
+    for(const dt of dl.querySelectorAll('dt')) {
+      const dd=dt.nextElementSibling;
+      if(dd?.tagName==='DD'&&visible(dt)&&visible(dd))addAttribute(dt.innerText,dd.innerText);
+    }
+  }
+
   // Image candidates. McMaster shows the product photo/render at the top and
   // dimension drawings / "2-D PDF" tiles further down; prefer the former.
   const DRAWING = /dimension|drawing|dwg|2-?d|pdf|cad|schematic/i;
@@ -114,7 +158,7 @@ async function extractMcMaster() {
   const imageDataUrls = await Promise.all(images.map(toDataUrl));
 
   const url = partNumber ? `https://www.mcmaster.com/${partNumber}/` : location.href;
-  return { partNumber, description, url, images, imageDataUrls };
+  return { source: 'mcmaster', partNumber, description, attributes, url, images, imageDataUrls };
 }
 
 if (typeof module !== "undefined" && module.exports) module.exports = { extractMcMaster };

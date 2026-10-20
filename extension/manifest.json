@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Product → Label",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Create, customize and print product labels through the Chrome print dialog.",
   "action": {
     "default_popup": "popup.html",
