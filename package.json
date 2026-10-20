@@ -1,8 +1,8 @@
 {
   "name": "mcmaster2dymo",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Chrome extension that prints a label for the McMaster-Carr part you're viewing.",
+  "description": "Modular product-label designer with site bindings and Chrome printing.",
   "license": "MIT",
   "scripts": {
     "test": "node --test test/*.test.js",

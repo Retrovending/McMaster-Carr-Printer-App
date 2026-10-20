@@ -1,0 +1,2 @@
+bwip-js 4.11.4, https://github.com/metafloor/bwip-js
+Vendored browser bundle with built-in barcode fonts. See adjacent license files. BWIPP copyright/notice is retained in the distribution.

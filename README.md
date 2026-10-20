@@ -1,81 +1,35 @@
-# McMaster → Label
+# Product → Label
 
-Chrome extension that prints a label for the
-McMaster-Carr part you're viewing: part number, description, part picture and
-a QR code linking back to `https://www.mcmaster.com/<part number>/`.
+Chrome extension for product labels from McMaster-Carr and AutomationDirect. Load the extension/ folder unpacked in Chrome, open a product detail page, and click the extension. Optional lookup accepts product links; AutomationDirect part numbers are also supported.
 
-![30336 layouts](docs/30336-layouts.png)
+## Design labels
 
-## Install
-1. `git clone https://github.com/davidnichols/mcmaster2dymo` (or build a zip with `npm run package`).
-2. Open `chrome://extensions`, turn on **Developer mode**.
-3. **Load unpacked** → select the `extension/` folder.
-4. Pin the extension. After pulling changes, click reload on its card.
+All layouts are editable records in the Layout dropdown. Starting layouts are provided once and can be edited or deleted. **Create new layout** opens a fresh editable arrangement. Use the visibility checkboxes to hide any element, drag visible elements in the preview, and use the Size slider to resize the selected element. The selection outline is only a preview guide.
 
-## Printer support
-Choose **Any printer — Chrome print dialog** to print through an installed
-Windows printer driver. This supports driver-based thermal label printers
-(for example Brother, Zebra, Rollo, or DYMO), and inkjet/laser printers that
-can accept the selected paper size. Individual models have not been hardware tested.
-Install the manufacturer's driver and configure a paper size matching one
-of the three presets below. Select that size in Chrome, use 100% scale,
-no margins, and disable headers/footers. The extension creates the requested
-copies as separate pages; leave Chrome's copies at 1.
+Enter a name and choose **Save as new layout** to add a dropdown choice. Changes to an existing layout become a draft; **Update saved layout** updates the entered name. Saved layouts retain visibility, positions, sizes, and 0°, 90°, 180°, or 270° rotation. There is no app-imposed layout count limit; available Chrome local storage is the practical limit. Designs and selection preferences are stored locally on this computer.
 
-The generic backend needs no DYMO software. Chrome chooses the system printer
-in its dialog; the extension cannot enumerate or silently select those printers.
-Raw ZPL/EPL, USB-only protocols, tape cutters, and custom media dimensions
-require a model-specific integration or additional media configuration.
+## Label sizes and printing
 
-Direct printing remains available for LabelWriter printers returned by DYMO
-Connect (the original target is the 550). LabelManager/tape devices are not
-supported by the direct backend. Its XML and printable bounds remain unchanged.
-Direct-print errors are reported so you can choose the browser backend;
-there is no automatic retry that could duplicate an already submitted job.
+Choose an existing Label size, or expand **Add a label size** and enter its name, width, and height in inches (0.25–24 inches). Custom sizes persist and can be selected like the presets. Layouts saved for a particular size appear when that size is selected; starting templates are available across sizes.
 
-## DYMO setup
-The LabelWriter 550 needs **DYMO Connect for Desktop** running; the extension
-prints through its local web service. The first time, open
-https://127.0.0.1:41951/DYMO/DLS/Printing/StatusConnected in Chrome and accept
-the certificate (it should say `true`). Then the popup lists your DYMO printers.
+Printing always opens Chrome’s print dialog. The app sends the chosen physical dimensions through CSS @page and the label image size; quarter-turns swap width and height. The extension does not select a printer or install paper stocks. The printer driver must support/match the selected stock; Chrome may require you to select that stock under More settings. Use no margins, 100% scale, no headers/footers, and one dialog copy (the app creates each copy). Verify the preview and QR readability after resizing; overlapping elements can obscure each other.
 
-Without DYMO Connect the extension falls back to Chrome's print dialog: pick
-the LabelWriter, set the paper size to your label and Margins to None.
+## Saved layouts and future defaults
 
-## Use
-On a part page (e.g. `mcmaster.com/9541K43`), click the icon or press
-**Alt+Shift+L**. Check the preview, edit the description if needed, choose
-label size, layout and printer, and click **Print label**. Settings are
-remembered.
+**Export saved layouts** downloads the saved geometry, visibility, rotation, and custom sizes as JSON. Keep this for backup or share the chosen layouts to promote into future built-in defaults. The editor remains available; no new default designs are imposed while you experiment.
 
-- **Label sizes:** 30336 (1" × 2-1/8", default), 30252 Address, 30256 Shipping.
-- **Layouts:** Classic, Banner, Black bar, Big picture, QR first, Text only.
-- **Picture:** the product render at the top of the page; dimension drawings
-  are skipped. Use ◀ ▶ under **Picture** to pick another, or untick it.
+## AutomationDirect attributes
+
+The popup reads the rendered product attribute table and lets you select fields instead of printing the standard description. Field selections persist per product (last 50 products). Verified on real C0-00DD1-D and C0-02DD1-D pages on October 16, 2026. Website changes, missing products, or access challenges can prevent lookup. McMaster retains editable descriptions and product images. Physical printer output must be checked on your own printer.
 
 ## Development
-```sh
-npm install          # canvas, jsqr, playwright-core (dev only)
-npm test             # layout/QR tests + page-extractor test in headless Chrome
-npm run layouts      # regenerate docs/30336-layouts.png (or: npm run layouts -- 30252)
-npm run package      # dist/mcmaster2dymo-<version>.zip
-```
-The extractor test needs Chrome or Chromium; set `CHROME_PATH` if it isn't
-found automatically.
 
-QR codes: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator)
-by Kazuhiko Arase (MIT), vendored at `extension/lib/qrcode.js`.
+Plain MV3 browser JavaScript, no build required. npm ci installs test dependencies; npm test runs the regression suite. npm run layouts generates a visual layout sheet. npm run package creates an extension archive. See LICENSE for the original MIT license.
 
-## License
+## Modular fields
 
-[MIT](LICENSE) © 2026 David Nichols
+Add text or code fields, choose each field’s type, and edit its name, content, font family, point size (0 means automatic), bold, italic, alignment, position and box dimensions. Drag a box or its blue corner handle; box resizing is independent of explicit font size. Installed system fonts may be entered by name; unavailable fonts fall back to a browser font. Remove hides original fields or deletes added fields.
 
-## AutomationDirect
+Under Content bindings by website, bind the same element independently to each supplier’s company, part number, product description, selected attributes, URL, or an attribute by name. Fixed text/templates support {company}, {partNumber}, {description}, {selectedAttributes}, and {url}. Explicit bindings override template text; unavailable attributes produce empty content. All geometry and style remain stable as data changes between sites. More suppliers require adding an extractor/permission and binding source.
 
-Open an AutomationDirect product detail page and click the extension, just like McMaster-Carr. The popup automatically reads the open page and waits up to 15 seconds for its attribute table. No part number or URL entry is required. An optional collapsed lookup section accepts McMaster-Carr and AutomationDirect product URLs. The input starts empty; AutomationDirect part numbers are also accepted. Lookup temporarily opens a background tab while the live product attribute table loads (up to 25 seconds). Keep the popup open during lookup. Select attributes to replace the description in both preview and printing. Defaults select up to three identifying attributes; selections, including none, are remembered locally for the last 50 products. The editable description remains available for McMaster. Long label text shrinks and then ends with an ellipsis: review the preview or choose fewer attributes/a larger label.
-
-Verified against the rendered C0-00DD1-D (28 attributes) and C0-02DD1-D (43 attributes) product tables on October 16, 2026. Website changes, unavailable products, network restrictions, or access challenges can prevent lookup; these produce an error instead of inventing specifications. No physical printer verification was performed for this integration.
-
-## Customize labels
-
-Click **Customize — drag and resize** to use the editable layout. Drag the company banner, part number, description, picture, or QR code within the preview. Select an element and move its Size slider to enlarge or shrink it. Arrangements are saved locally per label size; Reset arrangement restores the defaults. The blue selection outline is only a preview guide and does not print. Overlap warnings help you check the design; verify QR readability after resizing. Preset layouts remain available in the Layout menu.
+Invert this element or the entire label swaps black and white colors. This is separate from 90-degree rotation. Saved layouts retain inversion, custom fields, fonts, types and site bindings. The offline bwip-js 4.11.4 bundle exposes its available barcode and 2D-code formats, including Code 128, EAN/UPC, Data Matrix, PDF417, Aztec and QR. Formats impose their own data rules; invalid content and boxes too small to encode a code block printing with a design error. Advanced options accept a bwip-js JSON options object. Test actual scanner readability after changing code size or polarity. See extension/lib/bwip-js-NOTICE.txt for library provenance and licenses.

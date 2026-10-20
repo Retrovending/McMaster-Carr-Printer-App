@@ -53,7 +53,7 @@ test('popup lookup, checkbox persistence, preview and print use the same selecte
    window.McmPrinting={create:()=>({print:async(printer,job)=>{window.printed=job;return {backend:'browser'}}})};
   });
   for(const name of ['lib/qrcode.js','label.js','extract.js','automationdirect.js','popup.js']) await page.addScriptTag({path:path.join(root,'extension',name)});
-  await page.waitForFunction(()=>document.querySelector('#printer').value==='__browser__');
+  await page.waitForFunction(()=>document.body.dataset.ready==='true');
   await page.locator('#manualLookup summary').click();
   await page.fill('#adQuery','C0-00DD1-D'); await page.click('#lookup');
   await page.waitForFunction(()=>document.querySelectorAll('#attributes input').length===2);
@@ -85,7 +85,6 @@ test('popup lookup, checkbox persistence, preview and print use the same selecte
   await page.click('#print');
   assert.equal(await page.evaluate(()=>printed.part.partNumber),'91290A115');
   assert.equal(await page.evaluate(()=>printed.part.description),'Socket Head Screw');
-
  } finally {await browser.close()}
 });
 
@@ -113,7 +112,7 @@ for (const source of ['automationdirect','mcmaster']) test('popup automatically 
    window.McmPrinting={create:()=>({print:async(printer,job)=>{printed=job;return {backend:'browser'}}})};
   },source);
   for(const name of ['lib/qrcode.js','label.js','extract.js','automationdirect.js','popup.js']) await page.addScriptTag({path:path.join(root,'extension',name)});
-  await page.waitForFunction(()=>document.querySelector('#printer').value==='__browser__');
+  await page.waitForFunction(()=>document.body.dataset.ready==='true');
   assert.equal(await page.evaluate(()=>created),0);
   assert.equal(await page.locator('#manualLookup').getAttribute('open'),null);
   if(source==='automationdirect') {

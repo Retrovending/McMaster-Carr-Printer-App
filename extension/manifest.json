@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Product → Label",
-  "version": "1.4.0",
-  "description": "Print McMaster-Carr and AutomationDirect product labels with DYMO or any browser-supported printer.",
+  "version": "2.0.0",
+  "description": "Create, customize and print product labels through the Chrome print dialog.",
   "action": {
     "default_popup": "popup.html",
     "default_title": "Print label for this product",
@@ -35,8 +35,6 @@
   "host_permissions": [
     "https://www.mcmaster.com/*",
     "https://*.mcmaster.com/*",
-    "https://127.0.0.1:41951/*",
-    "https://localhost:41951/*",
     "https://www.automationdirect.com/*",
     "https://automationdirect.com/*",
     "https://cdn.automationdirect.com/*"

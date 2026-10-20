@@ -69,6 +69,7 @@
     const n = qr.getModuleCount();
     const quiet = 1; // a little quiet zone; label padding supplies the rest
     const cell = Math.floor(size / (n + quiet * 2));
+    if(cell<1)throw new Error('QR code box is too small for its content. Enlarge it.');
     const drawn = cell * (n + quiet * 2);
     const ox = Math.round(x + (size - drawn) / 2) + cell * quiet;
     const oy = Math.round(y + (size - drawn) / 2) + cell * quiet;
@@ -195,9 +196,17 @@
   };
   function editorElements(value = {}) {
     const out = {};
-    for (const [key, defaults] of Object.entries(ELEMENT_DEFAULTS)) {
+    const defaultsById={...ELEMENT_DEFAULTS};
+    for(const [key,e] of Object.entries(value || {})) if(!defaultsById[key] && e && typeof e==='object') defaultsById[key]={x:.1,y:.3,w:.4,h:.2,type:'text'};
+    for (const [key, defaults] of Object.entries(defaultsById)) {
       const e = { ...defaults, ...value[key] };
       const number = (n, fallback) => Number.isFinite(Number(n)) ? Number(n) : fallback;
+      e.enabled = e.enabled !== false;
+      e.type = ['text','code','image'].includes(e.type) ? e.type : key==='image'?'image':key==='qr'?'code':'text';
+      e.fontFamily = typeof e.fontFamily==='string' && e.fontFamily.trim() ? e.fontFamily.slice(0,100) : 'Arial';
+      e.fontSize = Math.max(0,Math.min(200,Number(e.fontSize)||0));
+      e.bindings = e.bindings && typeof e.bindings==='object' ? e.bindings : {};
+      e.symbology = e.symbology || 'qrcode';
       e.scale = Math.max(.4, Math.min(2.5, number(e.scale, 1)));
       e.w = Math.max(.04, Math.min(.96, number(e.w, defaults.w)));
       e.h = Math.max(.04, Math.min(.96, number(e.h, defaults.h)));
@@ -214,41 +223,68 @@
     if (/^([a-z0-9-]+\.)*mcmaster\.com$/i.test(host)) return 'McMaster';
     return '';
   }
-  function drawEditable(ctx, part, opts, W, H, makeCanvas, qrLib) {
-    const elements = editorElements(opts.elements);
-    for (const [key, e] of Object.entries(elements)) {
-      const x = Math.round(e.x * W), y = Math.round(e.y * H);
-      const w = Math.round(e.w * W), h = Math.round(e.h * H);
-      ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-      if (key === 'company') {
-        const name = companyName(part);
-        if (name) {
-          ctx.fillStyle = '#000'; ctx.fillRect(x, y, w, h);
-          let size = Math.max(8, Math.round(h * .78));
-          ctx.font = 'bold ' + size + 'px ' + FONT;
-          while (size > 8 && ctx.measureText(name).width > w * .94) ctx.font = 'bold ' + (--size) + 'px ' + FONT;
-          ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText(name, x + w / 2, y + h / 2);
+
+  function supplier(part) {
+    if(part.source) return part.source;
+    try {const h=new URL(part.url).hostname;if(/(^|\.)mcmaster\.com$/i.test(h))return 'mcmaster';if(/(^|\.)automationdirect\.com$/i.test(h))return 'automationdirect';}catch(_){}
+    return '';
+  }
+  function elementText(part,key,e) {
+    const defaultText={company:'{company}',partNumber:'{partNumber}',description:'{selectedAttributes}',qr:'{url}'};
+    const values={company:companyName(part),partNumber:part.partNumber||'',url:part.url||'',description:part.productDescription??part.description??'',selectedAttributes:part.selectedAttributes??part.description??''};
+    const binding=e.bindings?.[supplier(part)];
+    if(binding && binding!=='default' && binding!=='literal') {
+      if(binding.startsWith('attribute:'))return (part.attributes||[]).find(a=>a.name.toLowerCase()===binding.slice(10).toLowerCase())?.value || '';
+      return values[binding] || '';
+    }
+    const template=typeof e.text==='string'?e.text:(defaultText[key] || 'Custom text');
+    return template.replace(/\{(company|partNumber|description|selectedAttributes|url)\}/g,(_,name)=>values[name]);
+  }
+  function invertCanvas(canvas) {
+    const g=canvas.getContext('2d'),image=g.getImageData(0,0,canvas.width,canvas.height);
+    for(let i=0;i<image.data.length;i+=4) for(let c=0;c<3;c++) image.data[i+c]=255-image.data[i+c];
+    g.putImageData(image,0,0);return canvas;
+  }
+  function drawEditable(ctx,part,opts,W,H,makeCanvas,qrLib) {
+    for(const [key,e] of Object.entries(editorElements(opts.elements))) {
+      if(!e.enabled)continue;
+      const x=Math.round(e.x*W),y=Math.round(e.y*H),w=Math.max(1,Math.round(e.w*W)),h=Math.max(1,Math.round(e.h*H));
+      const tile=makeCanvas(w,h),g=tile.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,w,h);
+      const text=elementText(part,key,e);
+      if(e.type==='image') {
+        if(opts.image)drawPartImage(g,opts.image,0,0,w,h,makeCanvas);
+      } else if(e.type==='code') {
+        if(text) {
+          if(e.symbology==='qrcode') {const side=Math.min(w,h);drawQR(g,qrLib,text,(w-side)/2,(h-side)/2,side);}
+          else {
+            if(!root.bwipjs?.toCanvas)throw new Error('Barcode library is unavailable. Reload the extension.');
+            const code=makeCanvas(1,1);
+            try {root.bwipjs.toCanvas(code,{...(e.codeOptions || {}),bcid:e.symbology,text,scale:3,height:12,padding:10,backgroundcolor:'FFFFFF',includetext:!!e.codeText});}
+            catch(error){throw new Error((e.name||key)+': '+String(error.message||error));}
+            const factor=Math.min(w/code.width,h/code.height),dw=Math.floor(code.width*factor),dh=Math.floor(code.height*factor);
+            if(factor<1/3)throw new Error((e.name||key)+': barcode box is too small. Enlarge it.');
+            g.imageSmoothingEnabled=false;g.drawImage(code,Math.round((w-dw)/2),Math.round((h-dh)/2),dw,dh);
+          }
         }
-      } else if (key === 'image') {
-        if (opts.image) drawPartImage(ctx, opts.image, x, y, w, h, makeCanvas);
-      } else if (key === 'qr') {
-        if (part.url) { const side = Math.min(w, h); drawQR(ctx, qrLib, part.url, x + (w - side) / 2, y + (h - side) / 2, side); }
-      } else if (key === 'partNumber') {
-        ctx.fillStyle = '#000'; ctx.textBaseline = 'top';
-        const size = fitBold(ctx, part.partNumber || '', w, h * .85);
-        ctx.fillText(part.partNumber || '', x, y);
       } else {
-        // Fixed readable type: larger boxes enlarge text; overflow ends with ….
-        const size = Math.max(10, Math.min(h * .22, w * .085));
-        ctx.font = size + 'px ' + FONT; ctx.fillStyle = '#000'; ctx.textBaseline = 'top';
-        const lines = wrapText(ctx, part.description || '', w);
-        const count = Math.max(1, Math.floor(h / (size * 1.15)));
-        const visible = lines.slice(0, count);
-        if (lines.length > count) visible[count - 1] = ellipsize(ctx, visible[count - 1] + '…', w);
-        visible.forEach((line, i) => ctx.fillText(line, x, y + i * size * 1.15));
+        const banner=key==='company', bold=e.bold??(banner||key==='partNumber');
+        if(banner){g.fillStyle='#000';g.fillRect(0,0,w,h);}
+        g.fillStyle=banner?'#fff':'#000';
+        const automatic=banner||key==='partNumber';
+        let px=e.fontSize ? e.fontSize*DPI/72 : automatic?h*.78:Math.max(10,Math.min(h*.22,w*.085));
+        const font=()=> (e.italic?'italic ':'')+(bold?'bold ':'')+px+'px '+e.fontFamily;
+        g.font=font();
+        if(automatic&&!e.fontSize)while(px>8&&g.measureText(text).width>w*.94){px--;g.font=font();}
+        const align=e.align || (banner?'center':'left');g.textAlign=align;g.textBaseline='top';
+        const lines=String(text).split('\n').flatMap(line=>wrapText(g,line,w*.96).length?wrapText(g,line,w*.96):['']);
+        const count=Math.max(1,Math.floor(h/(px*1.15))),visible=lines.slice(0,count);
+        if(lines.length>count)visible[count-1]=ellipsize(g,visible[count-1]+'…',w*.96);
+        const tx=align==='center'?w/2:align==='right'?w*.98:w*.02;
+        const top=banner?Math.max(0,(h-visible.length*px*1.15)/2):0;
+        visible.forEach((line,i)=>g.fillText(line,tx,top+i*px*1.15));
       }
-      ctx.restore();
+      if(e.inverted)invertCanvas(tile);
+      ctx.drawImage(tile,x,y);
     }
   }
 
@@ -381,6 +417,15 @@
    * @returns canvas
    */
   function renderLabel(part, opts) {
+    const rotation = [90,180,270].includes(Number(opts.rotation)) ? Number(opts.rotation) : 0;
+    if(rotation) {
+      const src=renderLabel(part,{...opts,rotation:0,invert:false});
+      const make=opts.makeCanvas || ((w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c;});
+      const sideways=rotation%180!==0;
+      const out=make(sideways?src.height:src.width,sideways?src.width:src.height), g=out.getContext('2d');
+      g.translate(out.width/2,out.height/2);g.rotate(rotation*Math.PI/180);g.drawImage(src,-src.width/2,-src.height/2);
+      return opts.invert ? invertCanvas(out) : out;
+    }
     const makeCanvas = opts.makeCanvas || ((w, h) => {
       const c = document.createElement("canvas"); c.width = w; c.height = h; return c;
     });
@@ -393,7 +438,7 @@
     ctx.fillRect(0, 0, W, H);
     if (opts.layout === 'editable') {
       drawEditable(ctx, part, opts, W, H, makeCanvas, qrLib);
-      return canvas;
+      return opts.invert ? invertCanvas(canvas) : canvas;
     }
     // Reserve physical space for the seller banner before drawing any layout.
     let company = '';
@@ -430,7 +475,7 @@
     };
     (LAYOUTS[opts.layout] || LAYOUTS.classic).draw(c);
     ctx.restore();
-    return canvas;
+    return opts.invert ? invertCanvas(canvas) : canvas;
   }
 
   function escapeXml(s) {
@@ -479,7 +524,7 @@
 </DieCutLabel>`;
   }
 
-  const api = { ELEMENT_DEFAULTS, editorElements, DPI, LABEL_SIZES, LAYOUTS, renderLabel, dymoLabelXml, dymoBounds };
+  const api = { elementText, supplier, ELEMENT_DEFAULTS, editorElements, DPI, LABEL_SIZES, LAYOUTS, renderLabel, dymoLabelXml, dymoBounds };
   root.McmLabel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

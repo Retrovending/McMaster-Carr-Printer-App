@@ -70,3 +70,13 @@ test('editable elements clamp invalid and off-label positions',()=>{
   assert.ok(e.x+e.w<=.981 && e.y+e.h<=.981);
  }
 });
+
+test('disabled editable elements do not leave ink or QR codes in printed output',()=>{
+ const {createCanvas,qrcode}=require('./helpers');
+ const elements=Label.editorElements();
+ for(const element of Object.values(elements)) element.enabled=false;
+ const c=Label.renderLabel(SAMPLE_PARTS.screw,{widthIn:2.125,heightIn:1,layout:'editable',elements,makeCanvas:createCanvas,qrcode});
+ const data=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+ assert.ok(data.every(value=>value===255),'all-hidden label is entirely white');
+ assert.equal(decodeQR(c),null);
+});
