@@ -86,6 +86,27 @@ async function storeNamedLayouts() {
   await chrome.storage.local.set({ namedLabelLayouts: namedLayouts });
 }
 function initNamedLayouts() {
+  $('importLayouts').addEventListener('click',()=> $('importLayoutFile').click());
+  $('importLayoutFile').addEventListener('change',async()=>{
+    const input=$('importLayoutFile'),file=input.files[0];if(!file)return;
+    $('importLayouts').disabled=true;$('importMessage').textContent='Importing layouts…';
+    try {
+      let data;
+      try {data=JSON.parse(await file.text());} catch(_) {throw new Error('The selected file is not valid JSON.');}
+      const result=McmLayoutImport.prepare(data,{layouts:namedLayouts,sizes:customSizes,presets:McmLabel.LABEL_SIZES},{newId:()=>crypto.randomUUID(),normalizeElements:McmLabel.editorElements});
+      // Store the complete validated result together; leave the current library intact on failure.
+      await chrome.storage.local.set({namedLabelLayouts:result.layouts,customLabelSizes:result.sizes,layoutLibraryInitialized:true});
+      namedLayouts=result.layouts;customSizes=result.sizes;
+      const previousSize=$('size').value;
+      const first=namedLayouts.find(e=>e.id===result.importedIds[0]);
+      $('size').replaceChildren();for(const [id,size] of Object.entries(allSizes()))$('size').add(new Option(size.name,id));
+      $('size').value=first && first.size!=='*'?first.size:previousSize;
+      populateNamedLayouts(first?'saved:'+first.id:activeLayouts[$('size').value]);
+      useNamedLayout();refreshPreview();saveSettings();
+      $('importMessage').textContent='Imported '+result.importedIds.length+' layout(s) and '+result.addedSizeIds.length+' new label size(s). Existing layouts were kept; matching names receive an “imported” suffix.';
+    } catch(error) {$('importMessage').textContent='Import failed: '+error.message;}
+    finally {$('importLayouts').disabled=false;input.value='';}
+  });
   $('createLayout').addEventListener('click',createLayout);
   $('exportLayouts').addEventListener('click',()=>{
     const blob=new Blob([JSON.stringify({version:1,layouts:namedLayouts,sizes:customSizes},null,2)],{type:'application/json'});

@@ -10,7 +10,7 @@ async function popup(browser,state={}){
    tabs:{query:async()=>[{id:1,url:'https://www.mcmaster.com/91290A115/'}]},scripting:{executeScript:async()=>[{result:{partNumber:'91290A115',description:'Socket Head Screw',attributes:state.attributes || [],url:'https://www.mcmaster.com/91290A115/',images:[],imageDataUrls:[]}}]}};
   window.McmPrinting={create:()=>({print:async(printer,job)=>{window.printed=job;return {backend:'browser'}}})};
  },state);
- for(const name of ['lib/qrcode.js','lib/bwip-js-min.js','label.js','extract.js','automationdirect.js','popup.js'])await p.addScriptTag({path:path.join(extension,name)});
+ for(const name of ['lib/qrcode.js','lib/bwip-js-min.js','label.js','extract.js','automationdirect.js','layout-import.js','popup.js'])await p.addScriptTag({path:path.join(extension,name)});
  await p.waitForFunction(()=>document.body.dataset.ready==='true');return p;
 }
 test('visibility, draft isolation, named layouts, rotation, custom sizes and reopen persist',async()=>{
@@ -152,5 +152,33 @@ test('McMaster detected specs use the shared selector, persist checks and bind d
   assert.equal(await r.locator('#attributes input').nth(2).isChecked(),false);
   await r.check('#useAttributeText');await r.click('#print');
   assert.equal(await r.evaluate(()=>printed.part.description),'Thread Size: M3 × 0.5 mm; Length: 10 mm');
+ }finally{await b.close()}
+});
+
+test('import file picker restores layouts and sizes, supports repeated imports and keeps bad files out',async()=>{
+ const b=await chromium.launch(chromeLaunchOptions());try{
+  const p=await popup(b);
+  const original=await p.evaluate(()=>structuredClone(localState.namedLabelLayouts));
+  const elements=Label.editorElements({custom:{type:'text',name:'Thread',text:'Fixed',fontFamily:'Courier New',fontSize:14,bindings:{mcmaster:'attribute:Thread Size',automationdirect:'attribute:Voltage'}}});
+  elements.image.enabled=false;
+  const data={version:1,sizes:{'custom:from-file':{name:'Imported stock',width:3.25,height:1.75}},layouts:[{id:'saved-export',name:'Imported warehouse',size:'custom:from-file',elements,rotation:90,invert:true}]};
+  const upload=async value=>p.locator('#importLayoutFile').setInputFiles({name:'product-label-layouts.json',mimeType:'application/json',buffer:Buffer.from(typeof value==='string'?value:JSON.stringify(value))});
+  await upload(data);await p.waitForFunction(()=>document.querySelector('#importMessage').textContent.startsWith('Imported 1 layout'));
+  const imported=await p.evaluate(()=>localState.namedLabelLayouts.at(-1));
+  assert.equal(imported.name,'Imported warehouse');assert.notEqual(imported.size,'custom:from-file');assert.equal(await p.inputValue('#rotation'),'90');assert.equal(await p.isChecked('#invertLabel'),true);
+  assert.deepEqual(imported.elements.custom.bindings,elements.custom.bindings);assert.equal(imported.elements.image.enabled,false);
+  const id=await p.inputValue('#layout');assert.equal(id,'saved:'+imported.id);
+  assert.deepEqual(await p.evaluate(n=>localState.namedLabelLayouts.slice(0,n),original.length),original);
+  await p.click('#print');assert.equal(await p.evaluate(()=>printed.size.width),3.25);assert.equal(await p.evaluate(()=>printed.size.height),1.75);assert.equal(await p.evaluate(()=>printed.rotation),90);
+  await upload(data);await p.waitForFunction(()=>document.querySelector('#importMessage').textContent.includes('0 new label'));
+  assert.equal(await p.evaluate(()=>localState.namedLabelLayouts.at(-1).name),'Imported warehouse (imported)');
+  const snapshot=await p.evaluate(()=>structuredClone(localState));
+  await upload('{broken');await p.waitForFunction(()=>document.querySelector('#importMessage').textContent.startsWith('Import failed:'));
+  assert.deepEqual(await p.evaluate(()=>localState),snapshot);
+  // A rejected storage write must not change either the persisted or in-memory library.
+  await p.evaluate(()=>{const original=chrome.storage.local.set;chrome.storage.local.set=async values=>{if(values.namedLabelLayouts)throw Error('Storage full');return original(values);};});
+  await upload(data);await p.waitForFunction(()=>document.querySelector('#importMessage').textContent.includes('Storage full'));
+  assert.deepEqual(await p.evaluate(()=>localState),snapshot);
+  assert.equal(await p.locator('#layout option').count(),snapshot.namedLabelLayouts.filter(e=>e.size==='*'||e.size===imported.size).length+1);
  }finally{await b.close()}
 });

@@ -23,6 +23,11 @@
     <button id="lookup" type="submit">Look up product</button>
   </form>
   </details>
+  <div class="library-import">
+    <button id="importLayouts" type="button">Import layouts</button>
+    <input id="importLayoutFile" type="file" accept=".json,application/json" hidden>
+    <div id="importMessage" role="status"></div>
+  </div>
   <main id="main" hidden>
     <fieldset id="attributePanel" hidden>
       <legend>Detected product fields</legend>
@@ -129,6 +134,7 @@
   <script src="printing.js"></script>
   <script src="extract.js"></script>
   <script src="automationdirect.js"></script>
+  <script src="layout-import.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
